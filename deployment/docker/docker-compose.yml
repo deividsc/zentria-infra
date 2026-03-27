@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: odoo_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-odoo}
+      POSTGRES_USER: ${DB_USER:-odoo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks:
+      - odoo_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-odoo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  odoo:
+    image: odoo:17
+    container_name: odoo_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: ${DB_USER:-odoo}
+      PASSWORD: ${DB_PASSWORD}
+      # Supabase Connection (para módulos custom)
+      SUPABASE_HOST: ${SUPABASE_HOST:-}
+      SUPABASE_PORT: ${SUPABASE_PORT:-5432}
+      SUPABASE_DB: ${SUPABASE_DB:-postgres}
+      SUPABASE_USER: ${SUPABASE_USER:-postgres}
+      SUPABASE_PASSWORD: ${SUPABASE_PASSWORD:-}
+      # Odoo Settings
+      WORKERS: ${ODOO_WORKERS:-2}
+      MAX_CRAWL_DEPTH: ${ODOO_MAX_CRAWL_DEPTH:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      SMTP_SSL: ${SMTP_SSL:-false}
+    volumes:
+      - odoo_data:/var/lib/odoo
+      - ./config:/etc/odoo:ro
+      - ./addons:/mnt/extra-addons:ro
+      - ./custom_addons:/mnt/custom-addons:ro
+    ports:
+      - "127.0.0.1:8069:8069"
+    networks:
+      - odoo_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8069/web/database/selector"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    container_name: odoo_nginx
+    depends_on:
+      - odoo
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - odoo_network
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: odoo_certbot
+    volumes:
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/www:/var/www/certbot:ro
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do sleep 6h & wait $${!}; nginx -s reload; done &'"
+    command: sh -c 'while ! nginx -s reload; do sleep 5; done; sleep 12h & wait'
+    networks:
+      - odoo_network
+    restart: unless-stopped
+
+volumes:
+  db_data:
+    driver: local
+  odoo_data:
+    driver: local
+
+networks:
+  odoo_network:
+    driver: bridge
