@@ -1,0 +1,7 @@
+# GCP Terraform Variables
+# Copy this file to terraform.tfvars and fill in your values
+
+project_id  = "zentria-crm"
+region      = "us-central1"
+zone        = "us-central1-a"
+environment = "dev"

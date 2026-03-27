@@ -1,0 +1,28 @@
+# ===========================================
+# Ansible Role - Default Variables
+# ===========================================
+
+---
+app_user: odoo
+app_dir: /opt/zentria
+odoo_version: "17"
+
+# Database
+db_name: odoo
+db_user: odoo
+db_password: changeme
+
+# Domain
+domain_name: ""
+ssl_email: ""
+
+# Odoo settings
+odoo_workers: 2
+odoo_max_crawls: 0
+log_level: info
+
+# SMTP
+smtp_host: smtp.gmail.com
+smtp_port: 587
+smtp_user: ""
+smtp_password: ""

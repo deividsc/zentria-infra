@@ -1,0 +1,32 @@
+[options]
+admin_passwd = {{ odoo_admin_password }}
+db_host = db
+db_port = 5432
+db_name = {{ db_name }}
+db_user = {{ db_user }}
+db_password = {{ db_password }}
+
+addons_path = /mnt/extra-addons,/mnt/custom-addons
+multiprocess = True
+
+workers = {{ odoo_workers }}
+max_crawl_depth = {{ odoo_max_crawls }}
+
+limit_memory_hard = 2684354560
+limit_memory_soft = 2147483648
+limit_request = 8192
+limit_time_cpu = 600
+limit_time_real = 1200
+
+gevent_port = 8072
+proxy_mode = True
+
+logfile = /var/lib/odoo/odoo.log
+log_level = {{ log_level }}
+
+smtp_server = {{ smtp_host }}
+smtp_port = {{ smtp_port }}
+smtp_user = {{ smtp_user }}
+smtp_password = {{ smtp_password }}
+smtp_ssl = False
+smtp_tls = True

@@ -1,0 +1,213 @@
+# ===========================================
+# Ansible Role - Main Tasks
+# ===========================================
+
+---
+- name: Create application user
+  user:
+    name: "{{ app_user }}"
+    shell: /bin/bash
+    system: yes
+    create_home: yes
+    home: "{{ app_dir }}"
+
+- name: Create application directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ app_user }}"
+    mode: '0755'
+  loop:
+    - "{{ app_dir }}"
+    - "{{ app_dir }}/config"
+    - "{{ app_dir }}/addons"
+    - "{{ app_dir }}/custom_addons"
+    - "{{ app_dir }}/backups"
+    - "{{ app_dir }}/logs"
+
+# ===========================================
+# Docker Installation
+# ===========================================
+
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch={{ ansible_architecture }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+
+- name: Install Docker
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+
+- name: Add user to docker group
+  user:
+    name: "{{ app_user }}"
+    groups: docker
+    append: yes
+
+- name: Start and enable Docker
+  service:
+    name: docker
+    state: started
+    enabled: yes
+
+# ===========================================
+# Clone repository
+# ===========================================
+
+- name: Clone or update zentria-infra repository
+  git:
+    repo: "https://github.com/deividsc/zentria-infra.git"
+    dest: "{{ app_dir }}/repo"
+    version: main
+    force: yes
+  become_user: "{{ app_user }}"
+
+- name: Copy Docker Compose files
+  copy:
+    src: "{{ app_dir }}/repo/deployment/docker/"
+    dest: "{{ app_dir }}/"
+    owner: "{{ app_user }}"
+    mode: '0644'
+    directory_mode: '0755'
+
+# ===========================================
+# Environment configuration
+# ===========================================
+
+- name: Create .env file
+  template:
+    src: .env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: "{{ app_user }}"
+    mode: '0600'
+
+- name: Create Odoo config
+  template:
+    src: odoo.conf.j2
+    dest: "{{ app_dir }}/config/odoo.conf"
+    owner: "{{ app_user }}"
+    mode: '0644'
+
+# ===========================================
+# Nginx Configuration
+# ===========================================
+
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+
+- name: Create Nginx config
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/zentria
+    owner: root
+    mode: '0644'
+  notify: Restart nginx
+
+- name: Enable Nginx site
+  file:
+    src: /etc/nginx/sites-available/zentria
+    dest: /etc/nginx/sites-enabled/zentria
+    state: link
+  notify: Reload nginx
+
+- name: Remove default Nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+# ===========================================
+# SSL Certificate (Let's Encrypt)
+# ===========================================
+
+- name: Install Certbot
+  apt:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+
+- name: Obtain SSL certificate
+  command: >
+    certbot --nginx -d {{ domain_name }} --noninteractive --agree-tos -m {{ ssl_email }}
+    creates: /etc/letsencrypt/live/{{ domain_name }}
+  when: domain_name != ""
+
+- name: Setup SSL renewal cron
+  cron:
+    name: Certbot renewal
+    job: "certbot renew --quiet --deploy-hook 'systemctl reload nginx'"
+    minute: "0"
+    hour: "0"
+    day: "*"
+
+# ===========================================
+# UFW Firewall
+# ===========================================
+
+- name: Configure UFW
+  ufw:
+    direction: "{{ item.direction }}"
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { direction: 'in', rule: 'allow', port: '22', proto: 'tcp' }
+    - { direction: 'in', rule: 'allow', port: '80', proto: 'tcp' }
+    - { direction: 'in', rule: 'allow', port: '443', proto: 'tcp' }
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+    policy: deny
+
+# ===========================================
+# Fail2ban
+# ===========================================
+
+- name: Install Fail2ban
+  apt:
+    name: fail2ban
+    state: present
+
+- name: Start and enable Fail2ban
+  service:
+    name: fail2ban
+    state: started
+    enabled: yes
+
+# ===========================================
+# Docker containers
+# ===========================================
+
+- name: Pull Docker images
+  docker_image:
+    name: "{{ item }}"
+    source: pull
+  loop:
+    - odoo:17
+    - postgres:15
+    - nginx:latest
+
+- name: Start Docker containers
+  docker_compose:
+    project_src: "{{ app_dir }}"
+    state: present
+    pulled: yes
+  become_user: "{{ app_user }}"
+  environment:
+    PGPASSWORD: "{{ db_password }}"
