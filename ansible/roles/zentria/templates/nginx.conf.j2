@@ -11,17 +11,21 @@ http {
         server odoo:8072;
     }
 
+    upstream n8n {
+        server n8n:5678;
+    }
+
     {% if domain_name != "" %}
     # Redirect HTTP to HTTPS
     server {
         listen 80;
-        server_name {{ domain_name }};
+        server_name {{ domain_name }}{% if n8n_subdomain_mode and n8n_domain != "" %} {{ n8n_domain }}{% endif %};
         return 301 https://$server_name$request_uri;
     }
 
     server {
         listen 443 ssl http2;
-        server_name {{ domain_name }};
+        server_name {{ domain_name }}{% if n8n_subdomain_mode and n8n_domain != "" %} {{ n8n_domain }}{% endif %};
 
         ssl_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
@@ -62,5 +66,99 @@ http {
             expires 86400;
             add_header Cache-Control "public, no-transform";
         }
+
+        {% if n8n_enabled | default(false) and not n8n_subdomain_mode | default(false) %}
+        # n8n at /n8n/ path (IP-based access)
+        location /n8n/ {
+            proxy_pass http://n8n/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_connect_timeout 3600s;
+        }
+
+        # n8n webhook path
+        location /webhook/ {
+            proxy_pass http://n8n/webhook/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        }
+
+        # n8n static assets (for API/test paths without /n8n prefix)
+        location /rest/ {
+            proxy_pass http://n8n/rest/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+        {% endif %}
     }
+
+    {% if n8n_enabled | default(false) and n8n_subdomain_mode | default(false) and n8n_domain != "" %}
+    # n8n subdomain-based access
+    server {
+        listen 80;
+        {% if domain_name != "" %}
+        listen 443 ssl http2;
+        ssl_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
+        include /etc/letsencrypt/options-ssl-nginx.conf;
+        {% endif %}
+        server_name {{ n8n_domain }};
+
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        location / {
+            proxy_pass http://n8n;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            proxy_connect_timeout 3600s;
+        }
+
+        location /healthz {
+            proxy_pass http://n8n/healthz;
+            proxy_set_header Host $host;
+            access_log off;
+        }
+    }
+    {% endif %}
 }

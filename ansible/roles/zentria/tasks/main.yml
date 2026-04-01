@@ -202,6 +202,7 @@
     - odoo:17
     - postgres:15
     - nginx:latest
+    - n8nio/n8n:latest
 
 - name: Start Docker containers
   docker_compose:

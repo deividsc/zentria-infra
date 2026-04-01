@@ -16,6 +16,9 @@ db_password: changeme
 domain_name: ""
 ssl_email: ""
 
+# Server IP (for n8n path-based access)
+server_ip: "136.115.7.41"
+
 # Odoo settings
 odoo_workers: 2
 odoo_max_crawls: 0
@@ -26,3 +29,16 @@ smtp_host: smtp.gmail.com
 smtp_port: 587
 smtp_user: ""
 smtp_password: ""
+
+# n8n
+n8n_enabled: true
+n8n_subdomain_mode: false
+n8n_domain: ""
+n8n_webhook_url: ""
+n8n_host: "{{ server_ip }}"
+n8n_protocol: "http"
+n8n_port: "5678"
+n8n_basic_auth_user: n8n_admin
+n8n_basic_auth_password: changeme
+n8n_timezone: America/Argentina/Buenos_Aires
+n8n_executions_mode: regular
