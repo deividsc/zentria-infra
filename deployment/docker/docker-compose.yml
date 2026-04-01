@@ -102,7 +102,6 @@ services:
       - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
       - N8N_PORT=${N8N_PORT:-5678}
       - N8N_HOST=${N8N_HOST:-136.115.7.41}
-      - N8N_URL_PATH_PREFIX=/n8n
       - N8N_SECURE_COOKIE=false
       - EXECUTIONS_MODE=${N8N_EXECUTIONS_MODE:-regular}
       - GENERIC_TIMEZONE=${N8N_TIMEZONE:-America/Argentina/Buenos_Aires}
