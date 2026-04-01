@@ -82,7 +82,7 @@ deploy() {
         cd /opt/odoo
         
         # Crear directorios si no existen
-        mkdir -p config addons custom_addons backups nginx/ssl nginx/logs nginx/www
+        mkdir -p config addons custom_addons backups nginx/ssl nginx/logs nginx/www n8n_data
         
         # Detener servicios existentes
         docker compose down 2>/dev/null || true
